@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+.monaco-highlight-line {
+  background-color: rgba(38, 79, 120, 0.5) !important;
+  border-left: 2px solid #3b82f6;
+  border-radius: 2px;
+}
+
+.monaco-editor .margin-view-overlays .monaco-highlight-line {
+  background-color: transparent !important;
+  border: none;
+}
+
