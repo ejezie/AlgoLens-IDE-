@@ -63,6 +63,12 @@ export default function App() {
   const [speed, setSpeed] = useState(500);
   const [isRunning, setIsRunning] = useState(false);
   const [pyodideReady, setPyodideReady] = useState(false);
+  const [pendingTest, setPendingTest] = useState<{
+    funcName: string;
+    isClass: boolean;
+    args: {name: string, type: string}[];
+  } | null>(null);
+  const [testInputs, setTestInputs] = useState<Record<string, string>>({});
 
   const monaco = useMonaco();
   const editorRef = useRef<any>(null);
@@ -107,27 +113,176 @@ export default function App() {
     }
   }, [currentStep, mode, trace, monaco]);
 
-  const handleRun = async () => {
-    if (!currentCode.trim()) return;
+  const handleRun = async (overrideCode?: string) => {
+    const codeToRun = typeof overrideCode === 'string' ? overrideCode : currentCode;
+    if (!codeToRun.trim()) return;
     
     setIsRunning(true);
     setTrace([]);
     setCurrentStep(0);
     setIsPlaying(false);
     
+    if (editorRef.current && monaco) {
+      monaco.editor.setModelMarkers(editorRef.current.getModel(), 'owner', []);
+    }
+    
+    // Check if code is just function/class definitions without any top-level call or test driver
+    if (language === 'python') {
+      try {
+        const py = await initPyodide();
+        const sigJson = py.runPython(`
+import ast, json
+code_str = ${JSON.stringify(codeToRun)}
+def analyze(code_str):
+    try:
+        tree = ast.parse(code_str)
+        
+        has_top_call = False
+        for node in tree.body:
+            if isinstance(node, (ast.Expr, ast.Assign, ast.AnnAssign, ast.Assert)):
+                for child in ast.walk(node):
+                    if isinstance(child, ast.Call):
+                        has_top_call = True
+                        break
+            if has_top_call:
+                break
+                
+        if has_top_call:
+            return json.dumps({"hasCall": True})
+            
+        def get_type_str(node):
+            if not node: return ""
+            if isinstance(node, ast.Name): return node.id
+            if isinstance(node, ast.Attribute): return node.attr
+            if isinstance(node, ast.Constant): return str(node.value) if node.value is not None else ""
+            if isinstance(node, ast.Subscript):
+                val = get_type_str(node.value)
+                sl = get_type_str(node.slice)
+                return f"{val}[{sl}]" if sl else val
+            if isinstance(node, ast.Tuple):
+                return ", ".join(get_type_str(e) for e in node.elts)
+            if isinstance(node, ast.List):
+                return "[" + ", ".join(get_type_str(e) for e in node.elts) + "]"
+            if hasattr(node, 'value'):
+                return get_type_str(node.value)
+            return ""
+
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                for item in node.body:
+                    if isinstance(item, ast.FunctionDef) and item.name != '__init__':
+                        args = []
+                        for a in item.args.args:
+                            if a.arg != 'self':
+                                ann = get_type_str(a.annotation) if getattr(a, 'annotation', None) else ""
+                                args.append({"name": a.arg, "type": ann})
+                        return json.dumps({
+                            "hasCall": False,
+                            "funcName": item.name,
+                            "isClass": True,
+                            "className": node.name,
+                            "args": args
+                        })
+
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef):
+                args = []
+                for a in node.args.args:
+                    if a.arg != 'self':
+                        ann = get_type_str(a.annotation) if getattr(a, 'annotation', None) else ""
+                        args.append({"name": a.arg, "type": ann})
+                return json.dumps({
+                    "hasCall": False,
+                    "funcName": node.name,
+                    "isClass": False,
+                    "args": args
+                })
+
+    except Exception as e:
+        pass
+    return None
+
+analyze(code_str)
+        `);
+
+        if (sigJson) {
+          const sig = JSON.parse(sigJson);
+          if (!sig.hasCall && sig.funcName) {
+            setPendingTest(sig);
+            setIsRunning(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("AST analysis failed:", e);
+      }
+    } else if (language === 'javascript') {
+      const lines = codeToRun.trim().split('\n');
+      const lastLine = lines[lines.length - 1];
+      const hasTopCall = /console\.log|\w+\s*\([^)]*\)/.test(codeToRun) && !/^(function|class|\}|\/\/)/.test(lastLine.trim());
+
+      if (!hasTopCall) {
+        const jsClassMatch = codeToRun.match(/class\s+([a-zA-Z_]\w*)[\s\S]*?([a-zA-Z_]\w*)\s*\(([^)]*)\)/);
+        const jsFuncMatch = codeToRun.match(/function\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)/);
+        if (jsClassMatch && jsClassMatch[1] && jsClassMatch[2] !== 'constructor') {
+          const className = jsClassMatch[1];
+          const funcName = jsClassMatch[2];
+          const args = jsClassMatch[3].split(',').map(a => a.trim()).filter(a => a && a !== 'this').map(a => ({ name: a, type: '' }));
+          setPendingTest({ funcName, isClass: true, className, args } as any);
+          setIsRunning(false);
+          return;
+        } else if (jsFuncMatch) {
+          const funcName = jsFuncMatch[1];
+          const args = jsFuncMatch[2].split(',').map(a => a.trim()).filter(a => a).map(a => ({ name: a, type: '' }));
+          setPendingTest({ funcName, isClass: false, args });
+          setIsRunning(false);
+          return;
+        }
+      }
+    }
+
     try {
-      let resultTrace: TraceSnapshot[] = [];
+      let result;
       if (language === 'javascript') {
-        resultTrace = executeJS(currentCode);
+        result = executeJS(codeToRun);
       } else {
-        resultTrace = await executePython(currentCode);
+        result = await executePython(codeToRun);
       }
       
+      let resultTrace = result.trace;
+      
       if (resultTrace.length > 0) {
+        if (result.error) {
+          if (result.line && result.line > 0 && editorRef.current && monaco) {
+            monaco.editor.setModelMarkers(editorRef.current.getModel(), 'owner', [{
+              startLineNumber: result.line,
+              startColumn: 1,
+              endLineNumber: result.line,
+              endColumn: 1000,
+              message: result.error,
+              severity: monaco.MarkerSeverity.Error
+            }]);
+          }
+          resultTrace[resultTrace.length - 1].output.push(`[Execution Error] ${result.error}${result.line && result.line > 0 ? ` (At line ${result.line})` : ''}`);
+        }
         setTrace(resultTrace);
         setMode('playback');
       } else {
-        alert("No executable steps found or program finished instantly without trace.");
+        if (result.error) {
+          if (result.line && result.line > 0 && editorRef.current && monaco) {
+            monaco.editor.setModelMarkers(editorRef.current.getModel(), 'owner', [{
+              startLineNumber: result.line,
+              startColumn: 1,
+              endLineNumber: result.line,
+              endColumn: 1000,
+              message: result.error,
+              severity: monaco.MarkerSeverity.Error
+            }]);
+          }
+          alert(`Execution Error:\n${result.error}${result.line && result.line > 0 ? `\nAt line ${result.line}` : ''}`);
+        } else {
+          alert("No executable steps found or program finished instantly without trace.");
+        }
       }
     } catch (e: any) {
       console.error(e);
@@ -285,7 +440,12 @@ export default function App() {
               language={language}
               theme="vs-dark"
               value={currentCode}
-              onChange={(val) => setCode(val || '')}
+              onChange={(val) => {
+                setCode(val || '');
+                if (editorRef.current && monaco) {
+                  monaco.editor.setModelMarkers(editorRef.current.getModel(), 'owner', []);
+                }
+              }}
               onMount={handleEditorDidMount}
               options={{
                 minimap: { enabled: false },
@@ -336,7 +496,7 @@ export default function App() {
                           let parsed = null;
                           let type = 'primitive';
                           try {
-                            const jsonStr = valStr.replace(/'/g, '"').replace(/\(/g, '[').replace(/\)/g, ']');
+                            const jsonStr = String(valStr).replace(/'/g, '"').replace(/\(/g, '[').replace(/\)/g, ']');
                             parsed = JSON.parse(jsonStr);
                             if (Array.isArray(parsed)) type = 'array';
                             else if (parsed !== null && typeof parsed === 'object') type = 'object';
@@ -534,6 +694,83 @@ export default function App() {
           )}
         </section>
       </div>
+
+      {/* Test Case Auto-Injector Modal */}
+      {pendingTest && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#161b22] border border-[#30363d] rounded-xl p-6 w-[450px] shadow-2xl shadow-black">
+            <h2 className="text-white font-bold text-lg mb-2">Run {pendingTest.funcName}</h2>
+            <p className="text-xs text-[#8b949e] mb-5 leading-relaxed">
+              No function call was detected in your code. Provide the arguments below to automatically inject a test case.
+            </p>
+            
+            <div className="space-y-4 mb-8">
+              {pendingTest.args.map(arg => (
+                <div key={arg.name}>
+                  <label className="block text-xs font-bold text-[#c9d1d9] mb-1.5 font-mono">
+                    {arg.name}
+                    {arg.type && <span className="text-blue-400 font-normal ml-1">: {arg.type}</span>}
+                  </label>
+                  <input 
+                    type="text" 
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-md p-2.5 text-sm text-white font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all"
+                    placeholder={
+                      arg.type.includes('List') ? "e.g. [1, 2, 3]" :
+                      arg.type.includes('str') ? "e.g. 'hello'" :
+                      arg.type.includes('int') ? "e.g. 42" :
+                      arg.type.includes('bool') ? "e.g. True" :
+                      language === 'python' ? "e.g. [1, 2, 3] or 'hello'" : "e.g. [1, 2, 3] or \"hello\""
+                    }
+                    value={testInputs[arg.name] || ''}
+                    onChange={e => setTestInputs({...testInputs, [arg.name]: e.target.value})}
+                  />
+                </div>
+              ))}
+              {pendingTest.args.length === 0 && (
+                <div className="text-sm text-[#8b949e] italic p-3 bg-[#0d1117] rounded border border-[#30363d]/50">
+                  This function takes no arguments.
+                </div>
+              )}
+            </div>
+            
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => { setPendingTest(null); setTestInputs({}); }}
+                className="px-4 py-2 text-xs font-semibold text-[#8b949e] hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  const className = (pendingTest as any).className || 'Solution';
+                  const argsList = pendingTest.args.map(arg => testInputs[arg.name] || (language === 'python' ? 'None' : 'null')).join(', ');
+                  let callStr = '';
+                  if (language === 'python') {
+                    callStr = pendingTest.isClass 
+                      ? `print("Result:", ${className}().${pendingTest.funcName}(${argsList}))`
+                      : `print("Result:", ${pendingTest.funcName}(${argsList}))`;
+                  } else {
+                    callStr = pendingTest.isClass
+                      ? `console.log("Result:", new ${className}().${pendingTest.funcName}(${argsList}));`
+                      : `console.log("Result:", ${pendingTest.funcName}(${argsList}));`;
+                  }
+                  
+                  const newCode = currentCode.trim() + '\n\n' + callStr;
+                  setCode(newCode);
+                  setPendingTest(null);
+                  setTestInputs({});
+                  
+                  // Run immediately with the new code
+                  handleRun(newCode);
+                }}
+                className="px-5 py-2 bg-[#238636] hover:bg-[#2ea043] text-white text-xs font-bold rounded-md shadow-sm transition-all"
+              >
+                Inject & Run
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

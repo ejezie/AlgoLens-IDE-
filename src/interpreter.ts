@@ -13,8 +13,19 @@ export interface TraceSnapshot {
     evalContext?: string;
 }
 
-export function executeJS(code: string): TraceSnapshot[] {
-    const ast = parse(code, { locations: true, ecmaVersion: 2020 });
+export interface ExecutionResult {
+    trace: TraceSnapshot[];
+    error?: string;
+    line?: number;
+}
+
+export function executeJS(code: string): ExecutionResult {
+    let ast;
+    try {
+        ast = parse(code, { locations: true, ecmaVersion: 2020 });
+    } catch (e: any) {
+        return { trace: [], error: String(e.message || e), line: e.loc?.line };
+    }
     const trace: TraceSnapshot[] = [];
     const output: string[] = [];
     
@@ -48,6 +59,28 @@ export function executeJS(code: string): TraceSnapshot[] {
     }
     
     let currentEnv = new Environment(null, 'global');
+    
+    class ListNode {
+        val: number;
+        next: ListNode | null;
+        constructor(val: number = 0, next: ListNode | null = null) {
+            this.val = val;
+            this.next = next;
+        }
+    }
+    class TreeNode {
+        val: number;
+        left: TreeNode | null;
+        right: TreeNode | null;
+        constructor(val: number = 0, left: TreeNode | null = null, right: TreeNode | null = null) {
+            this.val = val;
+            this.left = left;
+            this.right = right;
+        }
+    }
+    currentEnv.declare('ListNode', ListNode);
+    currentEnv.declare('TreeNode', TreeNode);
+
     let stepCount = 0;
     const MAX_STEPS = 2000;
     
@@ -291,8 +324,9 @@ export function executeJS(code: string): TraceSnapshot[] {
         if (!(e instanceof ReturnError)) {
             console.error(e);
             output.push(String(e.message || e));
+            return { trace, error: String(e.message || e) };
         }
     }
     
-    return trace;
+    return { trace };
 }
