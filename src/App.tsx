@@ -118,8 +118,6 @@ export default function App() {
     if (!codeToRun.trim()) return;
     
     setIsRunning(true);
-    setTrace([]);
-    setCurrentStep(0);
     setIsPlaying(false);
     
     if (editorRef.current && monaco) {
@@ -266,6 +264,7 @@ analyze(code_str)
           resultTrace[resultTrace.length - 1].output.push(`[Execution Error] ${result.error}${result.line && result.line > 0 ? ` (At line ${result.line})` : ''}`);
         }
         setTrace(resultTrace);
+        setCurrentStep(prev => Math.min(prev, resultTrace.length - 1));
         setMode('playback');
       } else {
         if (result.error) {
@@ -295,8 +294,6 @@ analyze(code_str)
   const handleStop = () => {
     setIsPlaying(false);
     setMode('edit');
-    setTrace([]);
-    setCurrentStep(0);
   };
 
   const togglePlay = () => setIsPlaying(p => !p);
@@ -400,13 +397,25 @@ analyze(code_str)
               {isRunning && <Loader2 size={12} className="animate-spin" />}
             </div>
           ) : (
-            <div
-              onClick={handleStop}
-              className="flex items-center gap-2 px-2 py-1 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-white text-xs font-medium rounded transition-all cursor-pointer"
-            >
-              <X size={12} />
-              <span>Stop Edit</span>
-            </div>
+            <>
+              <div
+                onClick={() => {
+                  setCurrentStep(0);
+                  setIsPlaying(false);
+                }}
+                className="flex items-center gap-2 px-2 py-1 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-white text-xs font-medium rounded transition-all cursor-pointer"
+              >
+                <RotateCcw size={12} />
+                <span>Reset</span>
+              </div>
+              <div
+                onClick={handleStop}
+                className="flex items-center gap-2 px-2 py-1 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-white text-xs font-medium rounded transition-all cursor-pointer"
+              >
+                <Code2 size={12} />
+                <span>Edit Code</span>
+              </div>
+            </>
           )}
         </div>
       </nav>
@@ -628,9 +637,23 @@ analyze(code_str)
                   </div>
                   
                   <div className="flex-1 flex flex-col p-4 justify-center">
-                    <div className="flex justify-between items-center mb-4">
+                    <div className="flex justify-between items-center mb-1">
                       <span className="text-xs font-bold text-[#8b949e] uppercase">Playback Controls</span>
                       <span className="text-xs text-blue-400">Step {currentStep} / {Math.max(0, trace.length - 1)}</span>
+                    </div>
+                    
+                    <div className="mb-4">
+                      <input
+                        type="range"
+                        min={0}
+                        max={Math.max(0, trace.length - 1)}
+                        value={currentStep}
+                        onChange={(e) => {
+                          setIsPlaying(false);
+                          setCurrentStep(Number(e.target.value));
+                        }}
+                        className="w-full h-1.5 bg-[#30363d] rounded-full appearance-none cursor-pointer accent-blue-500"
+                      />
                     </div>
                     
                     <div className="flex items-center justify-center gap-6">
