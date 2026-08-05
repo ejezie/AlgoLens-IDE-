@@ -622,7 +622,7 @@ analyze(code_str)
               </div>
 
               {/* Playback Controls & Console Footer */}
-              <footer className="h-auto md:h-48 lg:h-40 bg-[#010409] border-t border-[#30363d] flex flex-col shrink-0">
+              <footer className="h-auto md:h-52 lg:h-44 bg-[#010409] border-t border-[#30363d] flex flex-col shrink-0">
                 <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
                   <div className="w-full md:w-[50%] lg:w-[400px] h-32 md:h-auto border-b md:border-b-0 md:border-r border-[#30363d] p-3 md:p-4 font-mono text-[10px] sm:text-xs text-[#8b949e] overflow-y-auto flex flex-col gap-1 shrink-0">
                     <div className="text-[#3fb950] mb-1">[Console Output]</div>
@@ -636,7 +636,7 @@ analyze(code_str)
                     {isPlaying && <div className="animate-pulse inline-block w-1 h-3 bg-[#c9d1d9] ml-1 mt-1"></div>}
                   </div>
                   
-                  <div className="flex-1 flex flex-col p-3 md:p-4 justify-center min-w-0">
+                  <div className="flex-1 flex flex-col px-4 py-3 md:px-6 md:py-4 overflow-y-auto min-w-0 justify-between gap-2">
                     <div className="flex justify-between items-center mb-1 gap-2">
                       <span className="text-[10px] md:text-[11px] font-bold text-[#8b949e] uppercase tracking-wider truncate">Playback Controls</span>
                       <span className="text-[10px] md:text-xs text-blue-400 whitespace-nowrap">Step {currentStep} / {Math.max(0, trace.length - 1)}</span>
