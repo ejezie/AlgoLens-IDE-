@@ -622,9 +622,9 @@ analyze(code_str)
               </div>
 
               {/* Playback Controls & Console Footer */}
-              <footer className="h-40 bg-[#010409] border-t border-[#30363d] flex flex-col shrink-0">
-                <div className="flex-1 flex overflow-hidden">
-                  <div className="w-[50%] lg:w-[400px] border-r border-[#30363d] p-4 font-mono text-xs text-[#8b949e] overflow-y-auto flex flex-col gap-1">
+              <footer className="h-auto md:h-48 lg:h-40 bg-[#010409] border-t border-[#30363d] flex flex-col shrink-0">
+                <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+                  <div className="w-full md:w-[50%] lg:w-[400px] h-32 md:h-auto border-b md:border-b-0 md:border-r border-[#30363d] p-3 md:p-4 font-mono text-[10px] sm:text-xs text-[#8b949e] overflow-y-auto flex flex-col gap-1 shrink-0">
                     <div className="text-[#3fb950] mb-1">[Console Output]</div>
                     {currentSnapshot && currentSnapshot.output.length > 0 ? (
                       currentSnapshot.output.map((line, i) => (
@@ -636,13 +636,13 @@ analyze(code_str)
                     {isPlaying && <div className="animate-pulse inline-block w-1 h-3 bg-[#c9d1d9] ml-1 mt-1"></div>}
                   </div>
                   
-                  <div className="flex-1 flex flex-col p-4 justify-center">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs font-bold text-[#8b949e] uppercase">Playback Controls</span>
-                      <span className="text-xs text-blue-400">Step {currentStep} / {Math.max(0, trace.length - 1)}</span>
+                  <div className="flex-1 flex flex-col p-3 md:p-4 justify-center min-w-0">
+                    <div className="flex justify-between items-center mb-1 gap-2">
+                      <span className="text-[10px] md:text-[11px] font-bold text-[#8b949e] uppercase tracking-wider truncate">Playback Controls</span>
+                      <span className="text-[10px] md:text-xs text-blue-400 whitespace-nowrap">Step {currentStep} / {Math.max(0, trace.length - 1)}</span>
                     </div>
                     
-                    <div className="mb-4">
+                    <div className="mb-2 md:mb-4 mt-1 md:mt-0">
                       <input
                         type="range"
                         min={0}
@@ -656,31 +656,31 @@ analyze(code_str)
                       />
                     </div>
                     
-                    <div className="flex items-center justify-center gap-6">
+                    <div className="flex items-center justify-center gap-4 md:gap-6">
                       <button 
                         onClick={() => { setIsPlaying(false); setCurrentStep(p => Math.max(0, p - 1)); }}
                         disabled={currentStep === 0}
-                        className="p-2 text-[#8b949e] hover:text-white disabled:opacity-30"
+                        className="p-1 md:p-2 text-[#8b949e] hover:text-white disabled:opacity-30 shrink-0"
                       >
-                        <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                        <svg className="w-4 h-4 md:w-5 md:h-5 fill-current" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
                       </button>
                       <button 
                         onClick={togglePlay}
-                        className="w-12 h-12 bg-white text-black rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform"
+                        className="w-10 h-10 md:w-12 md:h-12 bg-white text-black rounded-full flex items-center justify-center shadow-lg hover:scale-105 transition-transform shrink-0"
                       >
-                        {isPlaying ? <Pause size={24} className="fill-current" /> : <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
+                        {isPlaying ? <Pause size={18} className="fill-current md:w-6 md:h-6" /> : <svg className="w-5 h-5 md:w-6 md:h-6 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>}
                       </button>
                       <button 
                         onClick={() => { setIsPlaying(false); setCurrentStep(p => Math.min(trace.length - 1, p + 1)); }}
                         disabled={currentStep === trace.length - 1}
-                        className="p-2 text-[#8b949e] hover:text-white disabled:opacity-30"
+                        className="p-1 md:p-2 text-[#8b949e] hover:text-white disabled:opacity-30 shrink-0"
                       >
-                        <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                        <svg className="w-4 h-4 md:w-5 md:h-5 fill-current" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
                       </button>
                     </div>
                     
-                    <div className="mt-4 flex items-center gap-4 max-w-[300px] mx-auto w-full">
-                      <span className="text-[10px] text-[#484f58]">Speed</span>
+                    <div className="mt-3 md:mt-4 flex items-center gap-2 md:gap-4 max-w-[300px] mx-auto w-full">
+                      <span className="text-[9px] md:text-[10px] text-[#484f58] uppercase">Speed</span>
                       <div className="flex-1 relative flex items-center h-4">
                         <input
                           type="range"
@@ -692,14 +692,14 @@ analyze(code_str)
                           className="w-full h-1 bg-[#30363d] rounded-full appearance-none cursor-pointer accent-blue-500"
                         />
                       </div>
-                      <span className="text-[10px] text-[#8b949e] min-w-[32px] text-right">
+                      <span className="text-[9px] md:text-[10px] text-[#8b949e] min-w-[32px] text-right font-mono">
                         {speed === 50 ? 'Turbo' : speed === 200 ? 'Fast' : speed === 500 ? '1.0x' : 'Slow'}
                       </span>
                     </div>
                   </div>
                 </div>
                 
-                <div className="h-6 bg-[#0d1117] flex items-center px-4 justify-between border-t border-[#30363d] text-[10px] text-[#8b949e] shrink-0">
+                <div className="h-6 bg-[#0d1117] flex items-center px-4 justify-between border-t border-[#30363d] text-[9px] md:text-[10px] text-[#8b949e] shrink-0">
                   <div className="flex gap-4">
                     <span>Line {currentSnapshot?.line || 1}</span>
                     <span>Spaces: 4</span>
